@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Recognition History - HCR System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="page-header text-center mb-5">
+                <h1 class="display-5 fw-bold">
+                    <i class="fas fa-history text-primary"></i> Recognition History
+                </h1>
+                <p class="lead">View your previous character recognition results</p>
+            </div>
+            
+            <div class="history-controls mb-4">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <div class="btn-group">
+                            <button class="btn btn-outline-primary" onclick="filterHistory('all')">
+                                <i class="fas fa-list"></i> All
+                            </button>
+                            <button class="btn btn-outline-success" onclick="filterHistory('high')">
+                                <i class="fas fa-star"></i> High Confidence (>90%)
+                            </button>
+                            <button class="btn btn-outline-warning" onclick="filterHistory('medium')">
+                                <i class="fas fa-chart-line"></i> Medium (60-90%)
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="filterHistory('low')">
+                                <i class="fas fa-exclamation-triangle"></i> Low (<60%)
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button class="btn btn-danger" onclick="clearAllHistory()">
+                            <i class="fas fa-trash-alt"></i> Clear All
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="historyContainer" class="history-container">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3">Loading history...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Confirm Delete
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete all recognition history?</p>
+                <p class="text-muted">This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmClear()">Delete All</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allHistory = [];
+let currentFilter = 'all';
+
+// Load history on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadHistory();
+    setInterval(loadHistory, 30000); // Refresh every 30 seconds
+});
+
+function loadHistory() {
+    fetch('/api/history')
+        .then(response => response.json())
+        .then(data => {
+            allHistory = data;
+            renderHistory();
+        })
+        .catch(error => {
+            console.error('Error loading history:', error);
+            document.getElementById('historyContainer').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle"></i> Error loading history
+                </div>
+            `;
+        });
+}
+
+function renderHistory() {
+    const container = document.getElementById('historyContainer');
+    
+    if (allHistory.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state text-center py-5">
+                <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+                <h4>No History Yet</h4>
+                <p>Upload or draw characters to see recognition history</p>
+                <a href="{{ url_for('upload_page') }}" class="btn btn-primary">
+                    <i class="fas fa-upload"></i> Upload an Image
+                </a>
+            </div>
+        `;
+        return;
+    }
+    
+    let filtered = allHistory;
+    if (currentFilter === 'high') {
+        filtered = allHistory.filter(h => h.confidence_score >= 0.9);
+    } else if (currentFilter === 'medium') {
+        filtered = allHistory.filter(h => h.confidence_score >= 0.6 && h.confidence_score < 0.9);
+    } else if (currentFilter === 'low') {
+        filtered = allHistory.filter(h => h.confidence_score < 0.6);
+    }
+    
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="alert alert-info text-center">
+                <i class="fas fa-info-circle"></i> No items match the selected filter
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = filtered.map(item => `
+        <div class="history-card mb-3" data-confidence="${item.confidence_score}">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-2 text-center">
+                            <div class="history-character">${item.predicted_character}</div>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <img src="/${item.image_path}" alt="Character" class="history-image">
+                        </div>
+                        <div class="col-md-4">
+                            <div class="history-info">
+                                <p class="mb-1">
+                                    <strong>Confidence:</strong>
+                                    <span class="confidence-badge confidence-${getConfidenceLevel(item.confidence_score)}">
+                                        ${(item.confidence_score * 100).toFixed(2)}%
+                                    </span>
+                                </p>
+                                <p class="mb-1">
+                                    <strong>Date:</strong> ${formatDate(item.recognition_timestamp)}
+                                </p>
+                                <p class="mb-0">
+                                    <strong>ID:</strong> #${item.id}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteHistoryItem(${item.id})">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function getConfidenceLevel(score) {
+    if (score >= 0.9) return 'high';
+    if (score >= 0.6) return 'medium';
+    return 'low';
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now - date;
+    
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} minutes ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`;
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)} days ago`;
+    
+    return date.toLocaleDateString();
+}
+
+function filterHistory(filter) {
+    currentFilter = filter;
+    renderHistory();
+    
+    // Update active button
+    document.querySelectorAll('.btn-group .btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+}
+
+function clearAllHistory() {
+    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    modal.show();
+}
+
+function confirmClear() {
+    fetch('/api/clear-history', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(() => {
+        loadHistory();
+        const modal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+        modal.hide();
+        showSuccessToast();
+    });
+}
+
+function deleteHistoryItem(id) {
+    if (confirm('Delete this recognition record?')) {
+        fetch(`/api/history/${id}`, { method: 'DELETE' })
+            .then(() => loadHistory());
+    }
+}
+
+function showSuccessToast() {
+    // Create temporary toast
+    const toastHtml = `
+        <div class="toast align-items-center text-white bg-success border-0 position-fixed bottom-0 end-0 m-3" role="alert">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-check-circle"></i> History cleared successfully!
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', toastHtml);
+    const toast = new bootstrap.Toast(document.querySelector('.toast:last-child'));
+    toast.show();
+    setTimeout(() => document.querySelector('.toast:last-child')?.remove(), 3000);
+}
+</script>
+{% endblock %}

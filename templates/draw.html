@@ -1,0 +1,658 @@
+{% extends "base.html" %}
+
+{% block title %}Draw Character - HCR System{% endblock %}
+
+{% block extra_css %}
+<style>
+    .canvas-container {
+        background: white;
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+    
+    .drawing-canvas {
+        border: 2px solid #ddd;
+        border-radius: 10px;
+        cursor: crosshair;
+        background: white;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .canvas-tools {
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 10px;
+        margin-top: 20px;
+    }
+    
+    .color-preview {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: inline-block;
+        margin: 0 5px;
+        cursor: pointer;
+        border: 2px solid transparent;
+        transition: all 0.3s;
+    }
+    
+    .color-preview:hover {
+        transform: scale(1.1);
+    }
+    
+    .color-preview.selected {
+        border-color: #007bff;
+        transform: scale(1.1);
+    }
+    
+    .brush-size {
+        width: 150px;
+        display: inline-block;
+        margin: 0 15px;
+    }
+    
+    .btn-tool {
+        margin: 5px;
+        min-width: 100px;
+    }
+    
+    /* Model Switcher Styles */
+    .model-switcher {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .model-switcher h3 {
+        color: white;
+        margin-bottom: 15px;
+        font-size: 1.2rem;
+    }
+    
+    .model-btn {
+        padding: 10px 25px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        border: none;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        margin: 0 10px;
+    }
+    
+    .model-btn.active {
+        transform: scale(1.05);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    
+    .model-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    }
+    
+    #modelStatus {
+        margin-top: 10px;
+        font-size: 14px;
+        color: #f0f0f0;
+    }
+    
+    /* Loading overlay */
+    .loading-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.7);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    .loading-content {
+        background: white;
+        padding: 30px;
+        border-radius: 15px;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    }
+    
+    .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 8px;
+        color: white;
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .drawing-canvas {
+            width: 100%;
+            height: auto;
+        }
+        
+        .btn-tool {
+            min-width: auto;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        
+        .model-btn {
+            padding: 8px 15px;
+            font-size: 14px;
+            margin: 0 5px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="page-header text-center mb-4">
+                <h1 class="display-5 fw-bold">
+                    <i class="fas fa-paintbrush text-primary"></i> Draw Character
+                </h1>
+                <p class="lead">Draw a character using your mouse or finger</p>
+            </div>
+            
+            <!-- Model Switcher -->
+            <div class="model-switcher">
+                <h3 class="text-center">
+                    <i class="fas fa-microchip"></i> Select Recognition Model
+                </h3>
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <button id="btnLetters" class="model-btn active" data-model="letters" style="background: #4CAF50; color: white;">
+                        🔤 Letters (A-Z)
+                    </button>
+                    <button id="btnDigits" class="model-btn" data-model="digits" style="background: #2196F3; color: white;">
+                        🔢 Digits (0-9)
+                    </button>
+                </div>
+                <div id="modelStatus" class="text-center">
+                    Current model: <strong>LETTERS (A-Z)</strong>
+                </div>
+            </div>
+            
+            <div class="canvas-container">
+                <div class="text-center">
+                    <canvas id="drawingCanvas" class="drawing-canvas" 
+                            width="400" height="400" style="width: 100%; height: auto; max-width: 400px;">
+                        Your browser does not support canvas.
+                    </canvas>
+                </div>
+                
+                <div class="canvas-tools">
+                    <div class="row align-items-center">
+                        <div class="col-md-4 text-center mb-3 mb-md-0">
+                            <label class="fw-bold">Brush Color:</label>
+                            <div>
+                                <div class="color-preview" style="background: #000000;" onclick="setColor('#000000')"></div>
+                                <div class="color-preview" style="background: #FF0000;" onclick="setColor('#FF0000')"></div>
+                                <div class="color-preview" style="background: #0000FF;" onclick="setColor('#0000FF')"></div>
+                                <div class="color-preview" style="background: #008000;" onclick="setColor('#008000')"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4 text-center mb-3 mb-md-0">
+                            <label class="fw-bold">Brush Size:</label>
+                            <input type="range" id="brushSize" min="2" max="30" value="10" class="brush-size">
+                            <span id="brushSizeValue">10</span>px
+                        </div>
+                        
+                        <div class="col-md-4 text-center">
+                            <button class="btn btn-warning btn-tool" onclick="clearCanvas()">
+                                <i class="fas fa-trash-alt"></i> Clear
+                            </button>
+                            <button class="btn btn-success btn-tool" onclick="predictDrawing()">
+                                <i class="fas fa-microchip"></i> Recognize
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Result Section -->
+            <div id="drawingResult" class="result-card mt-4" style="display: none;">
+                <div class="card border-success">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-trophy"></i> Recognition Result</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-4 text-center">
+                                <div class="result-character" id="drawingPrediction">?</div>
+                            </div>
+                            <div class="col-md-8">
+                                <div class="result-details">
+                                    <h3>Predicted Character</h3>
+                                    <div class="confidence-meter">
+                                        <div class="confidence-label">Confidence Score</div>
+                                        <div class="progress">
+                                            <div id="drawingConfidenceBar" class="progress-bar bg-success" 
+                                                 role="progressbar" style="width: 0%"></div>
+                                        </div>
+                                        <div id="drawingConfidenceValue" class="text-center mt-2">0%</div>
+                                    </div>
+                                    <div id="resultModelUsed" class="text-center mt-2 text-muted">
+                                        <small>Model used: <span id="modelUsed">-</span></small>
+                                    </div>
+                                    <button class="btn btn-outline-primary mt-3" onclick="drawAgain()">
+                                        <i class="fas fa-paintbrush"></i> Draw Again
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tips Section -->
+            <div class="alert alert-info mt-4">
+                <i class="fas fa-lightbulb"></i>
+                <strong>Tips for best results:</strong>
+                <ul class="mb-0 mt-2">
+                    <li>Draw characters clearly and centered</li>
+                    <li>Use thick strokes for better recognition</li>
+                    <li>Avoid touching the edges of the canvas</li>
+                    <li>Draw black on white background for best results</li>
+                    <li>Switch between Letters and Digits models as needed</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Simple Loading Overlay -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <h5>Processing your drawing...</h5>
+        <p class="text-muted">Our AI is analyzing the character</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Canvas drawing functionality
+const canvas = document.getElementById('drawingCanvas');
+const ctx = canvas.getContext('2d');
+let drawing = false;
+let currentColor = '#000000';
+let currentSize = 10;
+let currentModel = 'letters';
+
+// Model switching functionality
+async function switchModel(modelType) {
+    try {
+        const response = await fetch('/api/switch-model', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ model_type: modelType })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            currentModel = modelType;
+            updateModelUI(modelType);
+            showNotification(`✓ Switched to ${modelType.toUpperCase()} model`, 'success');
+        } else {
+            showNotification(data.error || 'Failed to switch model', 'error');
+        }
+    } catch (error) {
+        console.error('Error switching model:', error);
+        showNotification('Error switching model', 'error');
+    }
+}
+
+async function getCurrentModel() {
+    try {
+        const response = await fetch('/api/current-model');
+        const data = await response.json();
+        currentModel = data.model_type;
+        updateModelUI(currentModel);
+    } catch (error) {
+        console.error('Error getting current model:', error);
+    }
+}
+
+function updateModelUI(modelType) {
+    const lettersBtn = document.getElementById('btnLetters');
+    const digitsBtn = document.getElementById('btnDigits');
+    const modelStatus = document.getElementById('modelStatus');
+    
+    if (modelType === 'letters') {
+        lettersBtn.classList.add('active');
+        digitsBtn.classList.remove('active');
+        lettersBtn.style.opacity = '1';
+        lettersBtn.style.transform = 'scale(1.05)';
+        digitsBtn.style.opacity = '0.7';
+        digitsBtn.style.transform = 'scale(1)';
+        modelStatus.innerHTML = 'Current model: <strong>LETTERS (A-Z)</strong>';
+    } else {
+        digitsBtn.classList.add('active');
+        lettersBtn.classList.remove('active');
+        digitsBtn.style.opacity = '1';
+        digitsBtn.style.transform = 'scale(1.05)';
+        lettersBtn.style.opacity = '0.7';
+        lettersBtn.style.transform = 'scale(1)';
+        modelStatus.innerHTML = 'Current model: <strong>DIGITS (0-9)</strong>';
+    }
+}
+
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = 'notification';
+    notification.style.backgroundColor = type === 'success' ? '#4CAF50' : '#f44336';
+    notification.innerHTML = `
+        <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
+        ${message}
+    `;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.animation = 'slideIn 0.3s ease reverse';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Initialize canvas
+function initCanvas() {
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = currentColor;
+    ctx.strokeStyle = currentColor;
+    ctx.lineWidth = currentSize;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+}
+
+// Drawing events
+function startDrawing(e) {
+    drawing = true;
+    const pos = getMousePos(e);
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+}
+
+function draw(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    const pos = getMousePos(e);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+}
+
+function stopDrawing() {
+    drawing = false;
+    ctx.beginPath();
+}
+
+// Get mouse/touch position
+function getMousePos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    let clientX, clientY;
+    
+    if (e.touches) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+    }
+    
+    let x = (clientX - rect.left) * scaleX;
+    let y = (clientY - rect.top) * scaleY;
+    
+    x = Math.max(0, Math.min(canvas.width, x));
+    y = Math.max(0, Math.min(canvas.height, y));
+    
+    return { x, y };
+}
+
+// Set brush color
+function setColor(color) {
+    currentColor = color;
+    ctx.strokeStyle = color;
+    
+    // Update UI
+    document.querySelectorAll('.color-preview').forEach(el => {
+        el.classList.remove('selected');
+        if (el.style.backgroundColor === color || 
+            (color === '#000000' && el.style.backgroundColor === 'rgb(0, 0, 0)')) {
+            el.classList.add('selected');
+        }
+    });
+}
+
+// Set brush size
+function setSize(size) {
+    currentSize = size;
+    ctx.lineWidth = size;
+    document.getElementById('brushSizeValue').textContent = size;
+}
+
+// Clear canvas
+function clearCanvas() {
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = currentColor;
+    ctx.strokeStyle = currentColor;
+    document.getElementById('drawingResult').style.display = 'none';
+}
+
+// Show loading overlay
+function showLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    overlay.style.display = 'flex';
+}
+
+// Hide loading overlay
+function hideLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    overlay.style.display = 'none';
+}
+
+// Check if canvas is empty
+function isCanvasEmpty() {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    tempCtx.drawImage(canvas, 0, 0);
+    const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i] < 250 || data[i+1] < 250 || data[i+2] < 250) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Modified predictDrawing function
+function predictDrawing() {
+    if (isCanvasEmpty()) {
+        showNotification('Please draw something first!', 'error');
+        return;
+    }
+    
+    showLoading();
+    
+    // Create a temporary canvas for preprocessing
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = 28;
+    tempCanvas.height = 28;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Draw white background
+    tempCtx.fillStyle = 'white';
+    tempCtx.fillRect(0, 0, 28, 28);
+    
+    // Draw the drawing canvas content scaled down
+    tempCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, 28, 28);
+    
+    // Get the image data and apply threshold
+    const imageData = tempCtx.getImageData(0, 0, 28, 28);
+    const data = imageData.data;
+    
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i+1];
+        const b = data[i+2];
+        const gray = (r + g + b) / 3;
+        const value = gray < 128 ? 0 : 255;
+        data[i] = value;
+        data[i+1] = value;
+        data[i+2] = value;
+    }
+    
+    tempCtx.putImageData(imageData, 0, 0);
+    const imageDataUrl = tempCanvas.toDataURL('image/png');
+    
+    // Send to server
+    fetch('/api/draw', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ image: imageDataUrl })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoading();
+        
+        if (data.success) {
+            displayDrawingResult(data);
+        } else {
+            showNotification(data.error || 'Failed to recognize character', 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        showNotification('Error processing drawing: ' + error.message, 'error');
+    });
+}
+
+function displayDrawingResult(data) {
+    document.getElementById('drawingPrediction').textContent = data.prediction;
+    const confidence = (data.confidence * 100).toFixed(2);
+    document.getElementById('drawingConfidenceBar').style.width = confidence + '%';
+    document.getElementById('drawingConfidenceValue').textContent = confidence + '%';
+    document.getElementById('modelUsed').textContent = data.model_used.toUpperCase();
+    
+    const bar = document.getElementById('drawingConfidenceBar');
+    if (confidence >= 80) {
+        bar.className = 'progress-bar bg-success';
+    } else if (confidence >= 60) {
+        bar.className = 'progress-bar bg-warning';
+    } else {
+        bar.className = 'progress-bar bg-danger';
+    }
+    
+    document.getElementById('drawingResult').style.display = 'block';
+    
+    // Smooth scroll to results
+    document.getElementById('drawingResult').scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'nearest' 
+    });
+}
+
+function drawAgain() {
+    clearCanvas();
+    document.getElementById('drawingResult').style.display = 'none';
+}
+
+// Event listeners
+canvas.addEventListener('mousedown', startDrawing);
+canvas.addEventListener('mousemove', draw);
+canvas.addEventListener('mouseup', stopDrawing);
+canvas.addEventListener('mouseleave', stopDrawing);
+
+// Touch events for mobile
+canvas.addEventListener('touchstart', startDrawing);
+canvas.addEventListener('touchmove', draw);
+canvas.addEventListener('touchend', stopDrawing);
+
+// Prevent scrolling on touch devices while drawing
+canvas.addEventListener('touchmove', (e) => {
+    if (drawing) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
+// Brush size slider
+document.getElementById('brushSize').addEventListener('input', (e) => {
+    setSize(parseInt(e.target.value));
+});
+
+// Model switcher event listeners
+document.getElementById('btnLetters').addEventListener('click', () => switchModel('letters'));
+document.getElementById('btnDigits').addEventListener('click', () => switchModel('digits'));
+
+// Initialize
+initCanvas();
+setColor('#000000');
+setSize(10);
+getCurrentModel();
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'c' || e.key === 'C') {
+        clearCanvas();
+    }
+    if (e.key === 'Enter') {
+        predictDrawing();
+    }
+});
+</script>
+{% endblock %}

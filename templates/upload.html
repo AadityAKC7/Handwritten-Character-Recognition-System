@@ -1,0 +1,431 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Image - HCR System{% endblock %}
+
+{% block extra_css %}
+<style>
+    .model-switcher {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .model-switcher h3 {
+        color: white;
+        margin-bottom: 15px;
+        font-size: 1.2rem;
+    }
+    
+    .model-btn {
+        padding: 10px 25px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        border: none;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        margin: 0 10px;
+    }
+    
+    .model-btn.active {
+        transform: scale(1.05);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    
+    .model-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    }
+    
+    #modelStatus {
+        margin-top: 10px;
+        font-size: 14px;
+        color: #f0f0f0;
+    }
+    
+    .notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 8px;
+        color: white;
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="page-header text-center mb-5">
+                <h1 class="display-5 fw-bold">
+                    <i class="fas fa-upload text-primary"></i> Upload Image
+                </h1>
+                <p class="lead">Upload a handwritten character image for recognition</p>
+            </div>
+            
+            <!-- Model Switcher -->
+            <div class="model-switcher">
+                <h3 class="text-center">
+                    <i class="fas fa-microchip"></i> Select Recognition Model
+                </h3>
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <button id="btnLetters" class="model-btn active" data-model="letters" style="background: #4CAF50; color: white;">
+                        🔤 Letters (A-Z)
+                    </button>
+                    <button id="btnDigits" class="model-btn" data-model="digits" style="background: #2196F3; color: white;">
+                        🔢 Digits (0-9)
+                    </button>
+                </div>
+                <div id="modelStatus" class="text-center">
+                    Current model: <strong>LETTERS (A-Z)</strong>
+                </div>
+            </div>
+            
+            <!-- Upload Area -->
+            <div class="upload-card">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <h4>Drag & Drop your image here</h4>
+                    <p>or</p>
+                    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                        <i class="fas fa-folder-open"></i> Browse Files
+                    </button>
+                    <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                    <p class="upload-hint mt-3">
+                        <small>Supported formats: JPG, PNG, GIF, BMP (Max 16MB)</small>
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Preview Section -->
+            <div id="previewSection" class="preview-card mt-4" style="display: none;">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-eye"></i> Image Preview</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-6 text-center">
+                                <img id="previewImage" class="preview-img" alt="Preview">
+                            </div>
+                            <div class="col-md-6">
+                                <div class="image-info">
+                                    <p><strong>Filename:</strong> <span id="filename"></span></p>
+                                    <p><strong>Size:</strong> <span id="filesize"></span></p>
+                                    <p><strong>Dimensions:</strong> <span id="dimensions"></span></p>
+                                </div>
+                                <div class="progress mt-3" id="progressBar" style="display: none;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" style="width: 100%">Processing...</div>
+                                </div>
+                                <button class="btn btn-success w-100 mt-3" onclick="processImage()" id="processBtn">
+                                    <i class="fas fa-microchip"></i> Recognize Character
+                                </button>
+                                <button class="btn btn-secondary w-100 mt-2" onclick="resetUpload()">
+                                    <i class="fas fa-redo"></i> Upload Another
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Result Section -->
+            <div id="resultSection" class="result-card mt-4" style="display: none;">
+                <div class="card border-success">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-trophy"></i> Recognition Result</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-4 text-center">
+                                <div class="result-character" id="predictedChar">?</div>
+                            </div>
+                            <div class="col-md-8">
+                                <div class="result-details">
+                                    <h3>Predicted Character</h3>
+                                    <div class="confidence-meter">
+                                        <div class="confidence-label">Confidence Score</div>
+                                        <div class="progress">
+                                            <div id="confidenceBar" class="progress-bar bg-success" 
+                                                 role="progressbar" style="width: 0%"></div>
+                                        </div>
+                                        <div id="confidenceValue" class="text-center mt-2">0%</div>
+                                    </div>
+                                    <div id="resultModelUsed" class="text-center mt-2 text-muted">
+                                        <small>Model used: <span id="modelUsed">-</span></small>
+                                    </div>
+                                    <button class="btn btn-outline-primary mt-3" onclick="saveToHistory()">
+                                        <i class="fas fa-save"></i> Save to History
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="successToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header bg-success text-white">
+            <i class="fas fa-check-circle me-2"></i>
+            <strong class="me-auto">Success</strong>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body">
+            Recognition completed successfully!
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentFile = null;
+let currentResult = null;
+let currentModel = 'letters';
+
+// Model switching functionality
+async function switchModel(modelType) {
+    try {
+        const response = await fetch('/api/switch-model', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ model_type: modelType })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            currentModel = modelType;
+            updateModelUI(modelType);
+            showNotification(`✓ Switched to ${modelType.toUpperCase()} model`, 'success');
+        } else {
+            showNotification(data.error || 'Failed to switch model', 'error');
+        }
+    } catch (error) {
+        console.error('Error switching model:', error);
+        showNotification('Error switching model', 'error');
+    }
+}
+
+async function getCurrentModel() {
+    try {
+        const response = await fetch('/api/current-model');
+        const data = await response.json();
+        currentModel = data.model_type;
+        updateModelUI(currentModel);
+    } catch (error) {
+        console.error('Error getting current model:', error);
+    }
+}
+
+function updateModelUI(modelType) {
+    const lettersBtn = document.getElementById('btnLetters');
+    const digitsBtn = document.getElementById('btnDigits');
+    const modelStatus = document.getElementById('modelStatus');
+    
+    if (modelType === 'letters') {
+        lettersBtn.classList.add('active');
+        digitsBtn.classList.remove('active');
+        lettersBtn.style.opacity = '1';
+        lettersBtn.style.transform = 'scale(1.05)';
+        digitsBtn.style.opacity = '0.7';
+        digitsBtn.style.transform = 'scale(1)';
+        modelStatus.innerHTML = 'Current model: <strong>LETTERS (A-Z)</strong>';
+    } else {
+        digitsBtn.classList.add('active');
+        lettersBtn.classList.remove('active');
+        digitsBtn.style.opacity = '1';
+        digitsBtn.style.transform = 'scale(1.05)';
+        lettersBtn.style.opacity = '0.7';
+        lettersBtn.style.transform = 'scale(1)';
+        modelStatus.innerHTML = 'Current model: <strong>DIGITS (0-9)</strong>';
+    }
+}
+
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = 'notification';
+    notification.style.backgroundColor = type === 'success' ? '#4CAF50' : '#f44336';
+    notification.innerHTML = `
+        <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
+        ${message}
+    `;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.animation = 'slideIn 0.3s ease reverse';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Drag and drop functionality
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+
+uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.classList.add('drag-over');
+});
+
+uploadArea.addEventListener('dragleave', () => {
+    uploadArea.classList.remove('drag-over');
+});
+
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    handleFile(file);
+});
+
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    handleFile(file);
+});
+
+function handleFile(file) {
+    if (!file) return;
+    
+    if (!file.type.match('image.*')) {
+        showNotification('Please upload an image file', 'error');
+        return;
+    }
+    
+    if (file.size > 16 * 1024 * 1024) {
+        showNotification('File size must be less than 16MB', 'error');
+        return;
+    }
+    
+    currentFile = file;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('previewImage').src = e.target.result;
+        document.getElementById('filename').textContent = file.name;
+        document.getElementById('filesize').textContent = formatFileSize(file.size);
+        
+        const img = new Image();
+        img.onload = function() {
+            document.getElementById('dimensions').textContent = `${img.width} x ${img.height} px`;
+        };
+        img.src = e.target.result;
+        
+        document.getElementById('previewSection').style.display = 'block';
+        document.getElementById('resultSection').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function processImage() {
+    if (!currentFile) return;
+    
+    const formData = new FormData();
+    formData.append('file', currentFile);
+    
+    document.getElementById('progressBar').style.display = 'block';
+    document.getElementById('processBtn').disabled = true;
+    
+    fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('progressBar').style.display = 'none';
+        document.getElementById('processBtn').disabled = false;
+        
+        if (data.success) {
+            currentResult = data;
+            displayResult(data);
+            showNotification('Recognition completed!', 'success');
+        } else {
+            showNotification('Error: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        document.getElementById('progressBar').style.display = 'none';
+        document.getElementById('processBtn').disabled = false;
+        showNotification('Error processing image: ' + error, 'error');
+    });
+}
+
+function displayResult(data) {
+    document.getElementById('predictedChar').textContent = data.prediction;
+    const confidence = (data.confidence * 100).toFixed(2);
+    document.getElementById('confidenceBar').style.width = confidence + '%';
+    document.getElementById('confidenceValue').textContent = confidence + '%';
+    document.getElementById('modelUsed').textContent = data.model_used.toUpperCase();
+    
+    const bar = document.getElementById('confidenceBar');
+    if (confidence >= 80) {
+        bar.className = 'progress-bar bg-success';
+    } else if (confidence >= 60) {
+        bar.className = 'progress-bar bg-warning';
+    } else {
+        bar.className = 'progress-bar bg-danger';
+    }
+    
+    document.getElementById('resultSection').style.display = 'block';
+}
+
+function resetUpload() {
+    currentFile = null;
+    currentResult = null;
+    fileInput.value = '';
+    document.getElementById('previewSection').style.display = 'none';
+    document.getElementById('resultSection').style.display = 'none';
+    uploadArea.classList.remove('drag-over');
+}
+
+function saveToHistory() {
+    showNotification('Saved to history!', 'success');
+}
+
+function showToast(type) {
+    const toastEl = document.getElementById('successToast');
+    const toast = new bootstrap.Toast(toastEl);
+    toast.show();
+}
+
+// Model switcher event listeners
+document.getElementById('btnLetters').addEventListener('click', () => switchModel('letters'));
+document.getElementById('btnDigits').addEventListener('click', () => switchModel('digits'));
+
+// Get current model on page load
+getCurrentModel();
+</script>
+{% endblock %}

@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handwritten Character Recognition - Preprocessing Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        /* Upload Area */
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 20px;
+            padding: 60px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9ff;
+        }
+        
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+            transform: scale(1.02);
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        .upload-text {
+            font-size: 18px;
+            color: #666;
+        }
+        
+        .upload-hint {
+            font-size: 12px;
+            color: #999;
+            margin-top: 10px;
+        }
+        
+        /* Preview Section */
+        .preview-section {
+            margin: 30px 0;
+            display: none;
+        }
+        
+        .preview-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .image-card {
+            background: #f8f9ff;
+            border-radius: 15px;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .image-card h3 {
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+        
+        .image-card img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        
+        .image-info {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        /* Buttons */
+        .button-group {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .btn {
+            padding: 12px 30px;
+            margin: 0 10px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102,126,234,0.4);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        /* Result Section */
+        .result-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 15px;
+            display: none;
+        }
+        
+        .result-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .result-content {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .result-item {
+            text-align: center;
+            padding: 15px;
+        }
+        
+        .result-label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .result-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        /* Loading Spinner */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .image-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .btn {
+                margin: 5px;
+                padding: 10px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✍️ Handwritten Character Recognition System</h1>
+        <p class="subtitle">Image Preprocessing Module Demo</p>
+        
+        <!-- Upload Area -->
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📤</div>
+            <div class="upload-text">Click or drag & drop an image here</div>
+            <div class="upload-hint">Supported formats: JPG, PNG (Max 16MB)</div>
+        </div>
+        
+        <input type="file" id="fileInput" style="display: none;" accept="image/jpeg,image/jpg,image/png">
+        
+        <!-- Loading Spinner -->
+        <div class="loader" id="loader"></div>
+        
+        <!-- Preview Section -->
+        <div class="preview-section" id="previewSection">
+            <div class="preview-title">📸 Image Processing Pipeline</div>
+            <div class="image-grid" id="imageGrid">
+                <!-- Images will be inserted here dynamically -->
+            </div>
+        </div>
+        
+        <!-- Result Section -->
+        <div class="result-section" id="resultSection">
+            <div class="result-title">🎯 Preprocessing Complete</div>
+            <div class="result-content">
+                <div class="result-item">
+                    <div class="result-label">Original Size</div>
+                    <div class="result-value" id="originalSize">-</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Final Size</div>
+                    <div class="result-value" id="finalSize">28x28</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Color Mode</div>
+                    <div class="result-value" id="colorMode">Grayscale</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="button-group">
+            <button class="btn btn-secondary" onclick="resetForm()">↺ Reset</button>
+            <button class="btn btn-primary" id="processBtn" style="display: none;" onclick="processImage()">🔍 Process Image</button>
+        </div>
+    </div>
+    
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const loader = document.getElementById('loader');
+        const previewSection = document.getElementById('previewSection');
+        const resultSection = document.getElementById('resultSection');
+        const processBtn = document.getElementById('processBtn');
+        let currentFilename = null;
+        
+        // Upload area click
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        // Drag and drop handlers
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#764ba2';
+            uploadArea.style.background = '#f0f2ff';
+        });
+        
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#667eea';
+            uploadArea.style.background = '#f8f9ff';
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#667eea';
+            uploadArea.style.background = '#f8f9ff';
+            const file = e.dataTransfer.files[0];
+            handleFileUpload(file);
+        });
+        
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            handleFileUpload(file);
+        });
+        
+        function handleFileUpload(file) {
+            if (!file) return;
+            
+            // Validate file type
+            if (!file.type.match('image.*')) {
+                alert('Please upload an image file (JPG or PNG)');
+                return;
+            }
+            
+            // Validate file size (16MB)
+            if (file.size > 16 * 1024 * 1024) {
+                alert('File size must be less than 16MB');
+                return;
+            }
+            
+            // Show loader
+            loader.style.display = 'block';
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                loader.style.display = 'none';
+                
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                
+                currentFilename = data.filename;
+                processBtn.style.display = 'inline-block';
+                
+                // Show preview of original image
+                showOriginalPreview(data.filepath, data.original_filename);
+            })
+            .catch(error => {
+                loader.style.display = 'none';
+                console.error('Error:', error);
+                alert('Error uploading file');
+            });
+        }
+        
+        function showOriginalPreview(filepath, filename) {
+            previewSection.style.display = 'block';
+            resultSection.style.display = 'none';
+            
+            const imageGrid = document.getElementById('imageGrid');
+            imageGrid.innerHTML = `
+                <div class="image-card">
+                    <h3>📤 Original Image</h3>
+                    <img src="/${filepath}" alt="Original">
+                    <div class="image-info">File: ${filename}</div>
+                </div>
+                <div class="image-card">
+                    <h3>⏳ Processing...</h3>
+                    <div style="padding: 50px; text-align: center;">Click "Process Image" to continue</div>
+                </div>
+            `;
+            
+            // Get original image size
+            const img = new Image();
+            img.onload = function() {
+                document.getElementById('originalSize').textContent = `${img.width}x${img.height}`;
+            };
+            img.src = '/' + filepath;
+        }
+        
+        function processImage() {
+            if (!currentFilename) return;
+            
+            loader.style.display = 'block';
+            processBtn.disabled = true;
+            
+            fetch('/preprocess', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ filename: currentFilename })
+            })
+            .then(response => response.json())
+            .then(data => {
+                loader.style.display = 'none';
+                processBtn.disabled = false;
+                
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                
+                // Display all preprocessing steps
+                displayPreprocessingSteps(data);
+                resultSection.style.display = 'block';
+            })
+            .catch(error => {
+                loader.style.display = 'none';
+                processBtn.disabled = false;
+                console.error('Error:', error);
+                alert('Error processing image');
+            });
+        }
+        
+        function displayPreprocessingSteps(data) {
+            const imageGrid = document.getElementById('imageGrid');
+            imageGrid.innerHTML = `
+                <div class="image-card">
+                    <h3>1️⃣ Original Image</h3>
+                    <img src="/${data.original}" alt="Original">
+                    <div class="image-info">Size: ${data.original_size}</div>
+                </div>
+                <div class="image-card">
+                    <h3>2️⃣ Grayscale</h3>
+                    <img src="/${data.grayscale}" alt="Grayscale">
+                    <div class="image-info">Formula: 0.299R + 0.587G + 0.114B</div>
+                </div>
+                <div class="image-card">
+                    <h3>3️⃣ Noise Removal</h3>
+                    <img src="/${data.denoised}" alt="Denoised">
+                    <div class="image-info">Gaussian Blur Applied</div>
+                </div>
+                <div class="image-card">
+                    <h3>4️⃣ Thresholding</h3>
+                    <img src="/${data.thresholded}" alt="Thresholded">
+                    <div class="image-info">Binary (Black & White)</div>
+                </div>
+                <div class="image-card">
+                    <h3>5️⃣ Resized (28x28)</h3>
+                    <img src="/${data.resized}" alt="Resized">
+                    <div class="image-info">Final size: 28x28 pixels</div>
+                </div>
+            `;
+        }
+        
+        function resetForm() {
+            currentFilename = null;
+            processBtn.style.display = 'none';
+            previewSection.style.display = 'none';
+            resultSection.style.display = 'none';
+            fileInput.value = '';
+            uploadArea.style.background = '#f8f9ff';
+        }
+    </script>
+</body>
+</html>
